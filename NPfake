@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Voxel Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100vh;
+            background: #87CEEB;
+        }
+        #hud {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #blockSelector {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .block {
+            width: 30px;
+            height: 30px;
+            display: inline-block;
+            margin: 5px;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .selected {
+            border: 2px solid white;
+        }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="hud">Position: <span id="position">0,0,0</span></div>
+    <div id="blockSelector">
+        <div class="block selected" style="background: #8B4513;" data-type="dirt"></div>
+        <div class="block" style="background: #7CFC00;" data-type="grass"></div>
+        <div class="block" style="background: #808080;" data-type="stone"></div>
+        <div class="block" style="background: #FFD700;" data-type="sand"></div>
+    </div>
+    <div id="instructions">
+        WASD: Move<br>
+        Mouse: Look<br>
+        Click: Place/Break blocks<br>
+        Space: Jump<br>
+        Shift: Break block
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const positionElement = document.getElementById('position');
+        const blockElements = document.querySelectorAll('.block');
+        
+        // Set canvas to window size
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        // Game state
+        const blockSize = 50;  // Size of each block in the world
+        const worldSize = 32;  // Number of blocks in each dimension
+        const gravity = 0.005;
+        
+        // Camera/player properties
+        const camera = {
+            x: worldSize * blockSize / 2,
+            y: worldSize * blockSize / 2,
+            z: 10,
+            rotX: 0,
+            rotY: 0,
+            velX: 0,
+            velY: 0,
+            velZ: 0,
+            speed: 0.2,
+            jumpStrength: 0.3,
+            onGround: false
+        };
+        
+        // Input tracking
+        const keys = {};
+        let mouseX = 0;
+        let mouseY = 0;
+        let selectedBlockType = 'dirt';
+        
+        // World generation
+        const world = {};
+        
+        function initWorld() {
+            // Generate simple terrain
+            for (let x = 0; x < worldSize; x++) {
+                for (let z = 0; z < worldSize; z++) {
+                    // Generate a simple height map
+                    const height = Math.floor(Math.sin(x * 0.2) * 2 + Math.cos(z * 0.2) * 2 + 8);
+                    
+                    // Place blocks based on height
+                    for (let y = 0; y < height; y++) {
+                        const blockType = y === height - 1 ? 'grass' : (y > height - 3 ? 'dirt' : 'stone');
+                        setBlock(x, y, z, blockType);
+                    }
+                }
+            }
+        }
+        
+        function getBlock(x, y, z) {
+            const key = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
+            return world[key];
+        }
+        
+        function setBlock(x, y, z, type) {
+            const key = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
+            if (type) {
+                world[key] = type;
+            } else {
+                delete world[key];
+            }
+        }
+        
+        function getBlockColor(type) {
+            switch (type) {
+                case 'dirt': return '#8B4513';
+                case 'grass': return '#7CFC00';
+                case 'stone': return '#808080';
+                case 'sand': return '#FFD700';
+                default: return '#FF0000';
+            }
+        }
+        
+        // Rendering
+        function render() {
+            // Clear canvas
+            ctx.fillStyle = '#87CEEB';  // Sky color
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw blocks in view
+            const camX = Math.floor(camera.x / blockSize);
+            const camY = Math.floor(camera.y / blockSize);
+            const camZ = Math.floor(camera.z / blockSize);
+            
+            // Render in a simple 2.5D perspective
+            for (let x = camX - 10; x <= camX + 10; x++) {
+                for (let z = camZ - 10; z <= camZ + 10; z++) {
+                    for (let y = camY - 10; y <= camY + 10; y++) {
+                        // Skip out of bounds
+                        if (x < 0 || y < 0 || z < 0 || x >= worldSize || y >= worldSize || z >= worldSize) continue;
+                        
+                        const block = getBlock(x, y, z);
+                        if (!block) continue;
+                        
+                        // Simple perspective calculation
+                        const posX = canvas.width / 2 + (x * blockSize - camera.x);
+                        const posY = canvas.height / 2 + (y * blockSize - camera.y) + (z * blockSize - camera.z);
+                        const size = blockSize * 0.8; // Adjusted for perspective
+                        
+                        // Only draw if in view
+                        if (posX > -size && posX < canvas.width + size && 
+                            posY > -size && posY < canvas.height + size) {
+                            
+                            ctx.fillStyle = getBlockColor(block);
+                            ctx.fillRect(posX - size/2, posY - size/2, size, size);
+                            
+                            // Simple block outline
+                            ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+                            ctx.strokeRect(posX - size/2, posY - size/2, size, size);
+                        }
+                    }
+                }
+            }
+            
+            // Draw crosshair
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2 - 10, canvas.height / 2);
+            ctx.lineTo(canvas.width / 2 + 10, canvas.height / 2);
+            ctx.moveTo(canvas.width / 2, canvas.height / 2 - 10);
+            ctx.lineTo(canvas.width / 2, canvas.height / 2 + 10);
+            ctx.stroke();
+            
+            // Update position display
+            positionElement.textContent = `${Math.floor(camera.x / blockSize)},${Math.floor(camera.y / blockSize)},${Math.floor(camera.z / blockSize)}`;
+        }
+        
+        // Update
+        function update() {
+            // Handle movement based on input
+            const speedMultiplier = keys['ShiftLeft'] ? 2 : 1;
+            
+            if (keys['KeyW']) {
+                camera.velX += Math.cos(camera.rotY) * camera.speed * speedMultiplier;
+                camera.velZ += Math.sin(camera.rotY) * camera.speed * speedMultiplier;
+            }
+            if (keys['KeyS']) {
+                camera.velX -= Math.cos(camera.rotY) * camera.speed * speedMultiplier;
+                camera.velZ -= Math.sin(camera.rotY) * camera.speed * speedMultiplier;
+            }
+            if (keys['KeyA']) {
+                camera.velX += Math.cos(camera.rotY - Math.PI/2) * camera.speed * speedMultiplier;
+                camera.velZ += Math.sin(camera.rotY - Math.PI/2) * camera.speed * speedMultiplier;
+            }
+            if (keys['KeyD']) {
+                camera.velX += Math.cos(camera.rotY + Math.PI/2) * camera.speed * speedMultiplier;
+                camera.velZ += Math.sin(camera.rotY + Math.PI/2) * camera.speed * speedMultiplier;
+            }
+            
+            // Jump
+            if (keys['Space'] && camera.onGround) {
+                camera.velY = camera.jumpStrength;
+                camera.onGround = false;
+            }
+            
+            // Apply physics
+            camera.velY -= gravity;
+            
+            camera.x += camera.velX;
+            camera.y += camera.velY;
+            camera.z += camera.velZ;
+            
+            // Collision detection with blocks
+            const playerSize = 0.3;
+            const feetPos = {
+                x: Math.floor(camera.x / blockSize),
+                y: Math.floor((camera.y - playerSize * blockSize) / blockSize),
+                z: Math.floor(camera.z / blockSize)
+            };
+            
+            // Check if block below feet
+            if (getBlock(feetPos.x, feetPos.y, feetPos.z)) {
+                if (camera.velY < 0) {
+                    camera.y = (feetPos.y + 1) * blockSize + playerSize * blockSize;
+                    camera.velY = 0;
+                    camera.onGround = true;
+                }
+            } else {
+                camera.onGround = false;
+            }
+            
+            // Apply friction
+            camera.velX *= 0.8;
+            camera.velZ *= 0.8;
+            if (Math.abs(camera.velX) < 0.001) camera.velX = 0;
+            if (Math.abs(camera.velZ) < 0.001) camera.velZ = 0;
+            
+            // Check if player is too far below the world
+            if (camera.y < -50) {
+                // Reset to middle of world
+                camera.x = worldSize * blockSize / 2;
+                camera.y = worldSize * blockSize;
+                camera.z = worldSize * blockSize / 2;
+                camera.velX = 0;
+                camera.velY = 0;
+                camera.velZ = 0;
+            }
+        }
+        
+        // Game loop
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Event listeners
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+        
+        window.addEventListener('mousemove', (e) => {
+            const deltaX = e.clientX - mouseX;
+            const deltaY = e.clientY - mouseY;
+            
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            
+            // Update camera rotation based on mouse movement
+            camera.rotY += deltaX * 0.003;
+            camera.rotX += deltaY * 0.003;
+            
+            // Limit vertical rotation
+            camera.rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotX));
+        });
+        
+        // Mouse click to place/break blocks
+        canvas.addEventListener('click', (e) => {
+            // Cast a ray from the player in the looking direction
+            const rayDir = {
+                x: Math.cos(camera.rotY) * Math.cos(camera.rotX),
+                y: Math.sin(camera.rotX),
+                z: Math.sin(camera.rotY) * Math.cos(camera.rotX)
+            };
+            
+            const rayPos = {
+                x: camera.x / blockSize,
+                y: camera.y / blockSize,
+                z: camera.z / blockSize
+            };
+            
+            // Raycasting
+            for (let i = 0; i < 10; i += 0.1) {
+                const checkX = Math.floor(rayPos.x + rayDir.x * i);
+                const checkY = Math.floor(rayPos.y + rayDir.y * i);
+                const checkZ = Math.floor(rayPos.z + rayDir.z * i);
+                
+                if (checkX < 0 || checkY < 0 || checkZ < 0 || 
+                    checkX >= worldSize || checkY >= worldSize || checkZ >= worldSize) {
+                    break;
+                }
+                
+                if (getBlock(checkX, checkY, checkZ)) {
+                    if (keys['ShiftLeft']) {
+                        // Break block
+                        setBlock(checkX, checkY, checkZ, null);
+                    } else {
+                        // Get previous position for placing block
+                        const prevX = Math.floor(rayPos.x + rayDir.x * (i - 0.1));
+                        const prevY = Math.floor(rayPos.y + rayDir.y * (i - 0.1));
+                        const prevZ = Math.floor(rayPos.z + rayDir.z * (i - 0.1));
+                        
+                        if (prevX >= 0 && prevY >= 0 && prevZ >= 0 && 
+                            prevX < worldSize && prevY < worldSize && prevZ < worldSize) {
+                            setBlock(prevX, prevY, prevZ, selectedBlockType);
+                        }
+                    }
+                    break;
+                }
+            }
+        });
+        
+        // Block selection
+        blockElements.forEach(el => {
+            el.addEventListener('click', (e) => {
+                // Update selected block
+                blockElements.forEach(b => b.classList.remove('selected'));
+                el.classList.add('selected');
+                selectedBlockType = el.dataset.type;
+                e.stopPropagation();
+            });
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        // Lock pointer for better camera control
+        canvas.addEventListener('click', () => {
+            canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+            canvas.requestPointerLock();
+        });
+        
+        // Initialize game
+        initWorld();
+        
+        // Start the game loop
+        gameLoop();
+    </script>
+</body>
+</html>
