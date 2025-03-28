@@ -148,10 +148,10 @@
             
             // Set up scene
             const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // Sky blue
+            scene.background = new THREE.Color(0x6CC7EB); // Serene blue sky
             
-            // Create fog for distance cutoff
-            scene.fog = new THREE.Fog(0x87CEEB, 20, 60);
+            // Create fog for distance cutoff - more atmosphere for the valley
+            scene.fog = new THREE.Fog(0x9CC7EB, 35, 80);
             
             // Set up camera
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -173,14 +173,15 @@
             // Create textures
             const textureLoader = new THREE.TextureLoader();
             
-            // Create texture for each block type
+            // Create texture for each block type - with more vibrant colors for a beautiful valley
             const blockTextures = {
-                grass: createMinecraftTexture('#7CFC00', '#8B4513'),
-                dirt: createMinecraftTexture('#8B4513', '#8B4513'),
-                stone: createMinecraftTexture('#888888', '#777777'),
-                wood: createMinecraftTexture('#8B4513', '#6B3E12'),
-                leaves: createMinecraftTexture('#228B22', '#006400'),
-                bedrock: createMinecraftTexture('#444444', '#333333')
+                grass: createMinecraftTexture('#80FF20', '#8B4513'), // More vibrant grass
+                dirt: createMinecraftTexture('#8B4513', '#6B2E0E'),
+                stone: createMinecraftTexture('#9A9A9A', '#777777'), // Lighter stone
+                wood: createMinecraftTexture('#A86032', '#8B5A2B'), // More colorful wood
+                leaves: createMinecraftTexture('#26A41E', '#006400'), // Brighter leaves
+                bedrock: createMinecraftTexture('#444444', '#333333'),
+                water: createMinecraftTexture('#4A84CF', '#3366A3')  // Water texture
             };
             
             // Create inventory icons
@@ -467,11 +468,13 @@
                 return block;
             }
             
-            // Create a simple world using simplex noise (simulated here)
+            // Create a beautiful valley landscape
             function createWorld() {
-                // Generate a basic Minecraft-like terrain
-                const worldSize = 32;
+                // Generate a valley-like terrain
+                const worldSize = 48; // Larger world
                 const worldHeight = 8;
+                const valleyDepth = 10; // How deep the valley goes
+                const mountainHeight = 25; // Height of mountains
                 
                 // Create bedrock layer
                 for (let x = -worldSize/2; x < worldSize/2; x++) {
@@ -480,63 +483,177 @@
                     }
                 }
                 
-                // Create terrain with stone and dirt layers
+                // Create terrain with valley and mountains
                 for (let x = -worldSize/2; x < worldSize/2; x++) {
                     for (let z = -worldSize/2; z < worldSize/2; z++) {
-                        // Simple height map using sine functions for hills
-                        const height = Math.floor(
-                            Math.abs(Math.sin(x * 0.2) * Math.cos(z * 0.2) * 3) + 
-                            Math.abs(Math.sin(x * 0.1 + 0.5) * Math.cos(z * 0.1 + 0.5) * 4) + 
-                            5
-                        );
+                        // Valley shape - create mountains on sides and valley in middle
+                        const distanceFromCenter = Math.sqrt(x * x + z * z);
+                        
+                        // Valley function - deeper in middle, mountains around edges
+                        let valleyFactor = Math.sin(distanceFromCenter * 0.1) * 5;
+                        
+                        // Create two parallel mountain ranges with a valley in between
+                        let mountainRange = Math.abs(x) - 5;
+                        mountainRange = mountainRange < 0 ? 0 : mountainRange;
+                        
+                        // River running through the valley
+                        const riverWidth = 3;
+                        const isRiver = Math.abs(z) < riverWidth;
+                        
+                        // Height calculation
+                        let height;
+                        
+                        if (isRiver) {
+                            // River bed is slightly above bedrock
+                            height = 3;
+                        } else {
+                            // Calculate base terrain height
+                            height = Math.floor(
+                                // Base valley shape
+                                (Math.pow(x/15, 2) + 5) +
+                                // Add some noise for natural look
+                                (Math.sin(x * 0.2) * Math.cos(z * 0.2) * 2) +
+                                // Add mountain ranges on sides
+                                mountainRange * 0.7
+                            );
+                            
+                            // Additional height variations
+                            height += Math.sin(x * 0.05) * Math.sin(z * 0.05) * 3;
+                        }
+                        
+                        // Ensure minimum height
+                        height = Math.max(3, height);
                         
                         // Create stone layer
                         for (let y = 1; y <= height - 3; y++) {
                             createBlock(x, y, z, 'stone');
                         }
                         
-                        // Create dirt layer
-                        for (let y = height - 2; y < height; y++) {
-                            createBlock(x, y, z, 'dirt');
+                        // Create dirt layer (except for river)
+                        if (!isRiver) {
+                            for (let y = height - 2; y < height; y++) {
+                                createBlock(x, y, z, 'dirt');
+                            }
+                            
+                            // Create grass on top (except for river)
+                            createBlock(x, height, z, 'grass');
+                            
+                            // Add trees on flat areas, but not too close to river
+                            if (Math.random() > 0.98 && Math.abs(z) > riverWidth + 2 && 
+                                Math.abs(x + 1) - Math.abs(x) < 0.1) {
+                                createTree(x, height + 1, z);
+                            }
+                        } else {
+                            // Create water blocks for the river (TODO: would add actual water in full game)
+                            for (let y = 3; y <= 4; y++) {
+                                // Blue-tinted stone for water
+                                const block = createBlock(x, y, z, 'stone');
+                                if (block) {
+                                    block.material.color.setHex(0x3333AA);
+                                }
+                            }
                         }
-                        
-                        // Create grass on top
-                        createBlock(x, height, z, 'grass');
-                        
-                        // Randomly place trees
-                        if (Math.random() > 0.98) {
-                            createTree(x, height + 1, z);
+                    }
+                }
+                
+                // Add some decorative elements to make the valley more beautiful
+                
+                // Forest clusters on hillsides
+                for (let i = 0; i < 10; i++) {
+                    const clusterX = Math.floor(Math.random() * worldSize - worldSize/2);
+                    const clusterZ = Math.floor(Math.random() * worldSize - worldSize/2);
+                    
+                    // Find top block at this position
+                    let topY = 0;
+                    for (const block of blocks) {
+                        if (block.position.x === clusterX && block.position.z === clusterZ && 
+                            block.position.y > topY && block.userData.type === 'grass') {
+                            topY = block.position.y;
+                        }
+                    }
+                    
+                    if (topY > 0) {
+                        // Create a cluster of trees
+                        for (let j = 0; j < 5; j++) {
+                            const treeX = clusterX + Math.floor(Math.random() * 8) - 4;
+                            const treeZ = clusterZ + Math.floor(Math.random() * 8) - 4;
+                            
+                            // Find top block at this tree position
+                            let treeTopY = 0;
+                            for (const block of blocks) {
+                                if (block.position.x === treeX && block.position.z === treeZ && 
+                                    block.position.y > treeTopY && block.userData.type === 'grass') {
+                                    treeTopY = block.position.y;
+                                }
+                            }
+                            
+                            if (treeTopY > 0) {
+                                createTree(treeX, treeTopY + 1, treeZ);
+                            }
                         }
                     }
                 }
             }
             
-            // Create a Minecraft-style tree
+            // Create a Minecraft-style tree - with two different tree types for variety
             function createTree(x, y, z) {
+                // Randomly choose between oak and birch trees
+                const treeType = Math.random() > 0.3 ? 'oak' : 'birch';
+                
                 // Trunk
                 const trunkHeight = 4 + Math.floor(Math.random() * 3);
-                for (let i = 0; i < trunkHeight; i++) {
-                    createBlock(x, y + i, z, 'wood');
-                }
                 
-                // Leaves
-                for (let dx = -2; dx <= 2; dx++) {
-                    for (let dz = -2; dz <= 2; dz++) {
-                        for (let dy = 0; dy <= 2; dy++) {
-                            // Skip corners for a more rounded look
-                            if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-                            
-                            createBlock(x + dx, y + trunkHeight - 1 + dy, z + dz, 'leaves');
-                        }
+                // Different wood colors based on tree type
+                const trunkMaterial = treeType === 'oak' ? 'wood' : 'stone';
+                
+                for (let i = 0; i < trunkHeight; i++) {
+                    const trunk = createBlock(x, y + i, z, trunkMaterial);
+                    
+                    // For birch trees, make the trunk white
+                    if (treeType === 'birch' && trunk) {
+                        trunk.material.color.setHex(0xEEEEDD);
                     }
                 }
                 
-                // Top leaves
-                createBlock(x, y + trunkHeight + 2, z, 'leaves');
-                createBlock(x + 1, y + trunkHeight + 2, z, 'leaves');
-                createBlock(x - 1, y + trunkHeight + 2, z, 'leaves');
-                createBlock(x, y + trunkHeight + 2, z + 1, 'leaves');
-                createBlock(x, y + trunkHeight + 2, z - 1, 'leaves');
+                // Leaves - different shapes based on tree type
+                if (treeType === 'oak') {
+                    // Oak tree - round canopy
+                    for (let dx = -2; dx <= 2; dx++) {
+                        for (let dz = -2; dz <= 2; dz++) {
+                            for (let dy = 0; dy <= 2; dy++) {
+                                // Skip corners for a more rounded look
+                                if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+                                
+                                createBlock(x + dx, y + trunkHeight - 1 + dy, z + dz, 'leaves');
+                            }
+                        }
+                    }
+                    
+                    // Top leaves
+                    createBlock(x, y + trunkHeight + 2, z, 'leaves');
+                    createBlock(x + 1, y + trunkHeight + 2, z, 'leaves');
+                    createBlock(x - 1, y + trunkHeight + 2, z, 'leaves');
+                    createBlock(x, y + trunkHeight + 2, z + 1, 'leaves');
+                    createBlock(x, y + trunkHeight + 2, z - 1, 'leaves');
+                } else {
+                    // Birch tree - taller and more cone-shaped
+                    for (let level = 0; level < 5; level++) {
+                        const radius = Math.max(0, 3 - level);
+                        for (let dx = -radius; dx <= radius; dx++) {
+                            for (let dz = -radius; dz <= radius; dz++) {
+                                // Skip corners for a more rounded look
+                                if (dx*dx + dz*dz > radius*radius) continue;
+                                
+                                const leaves = createBlock(x + dx, y + trunkHeight + level, z + dz, 'leaves');
+                                
+                                // Make birch leaves slightly lighter green
+                                if (leaves) {
+                                    leaves.material.color.setHex(0x88C148);
+                                }
+                            }
+                        }
+                    }
+                }
             }
             
             // Movement physics
