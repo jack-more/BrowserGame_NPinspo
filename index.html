@@ -9,6 +9,7 @@
             margin: 0;
             overflow: hidden;
             font-family: Arial, sans-serif;
+            background-color: #333;
         }
         #gameCanvas {
             width: 100%;
@@ -49,6 +50,26 @@
             cursor: pointer;
             z-index: 100;
         }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            z-index: 100;
+        }
+        #position {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            border-radius: 5px;
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
@@ -57,14 +78,31 @@
         WASD: Move<br>
         Mouse: Look<br>
         Click: Place/Break blocks<br>
-        Space: Jump
+        Space: Jump<br>
+        Shift: Break block<br>
+        E: Toggle block selector
     </div>
     <div id="crosshair">+</div>
-    <button id="startButton">Start Game</button>
+    <div id="loading">Loading Minecraft-Style World<br><br>Preparing terrain...</div>
+    <button id="startButton" style="display: none;">Start Game</button>
+    <div id="position">Position: 0, 0, 0</div>
 
+    <!-- Load Three.js before our game code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
     <script>
-        // Wait for Three.js to load
-        document.getElementById('startButton').addEventListener('click', startGame);
+        // Wait for the DOM and Three.js to load completely
+        window.addEventListener('load', function() {
+            // Check if Three.js is loaded correctly
+            if (typeof THREE === 'undefined') {
+                document.getElementById('loading').innerHTML = 'Error: Could not load Three.js library.<br>Please check your internet connection and try again.';
+                return;
+            }
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('startButton').style.display = 'block';
+            document.getElementById('startButton').addEventListener('click', startGame);
+        });
         
         function startGame() {
             document.getElementById('startButton').style.display = 'none';
@@ -78,8 +116,9 @@
             camera.position.y = 2;
             
             // Set up renderer
-            const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas') });
+            const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
             
             // Add lights
             const ambientLight = new THREE.AmbientLight(0x404040, 1);
@@ -124,6 +163,9 @@
                 stone: new THREE.MeshLambertMaterial({ color: 0x808080 })
             };
             
+            // Current block type for placement
+            let currentBlockType = 'dirt';
+            
             // Create simple world
             createWorld();
             
@@ -161,13 +203,15 @@
                 if (!isPointerLocked) return;
                 
                 raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-                const intersects = raycaster.intersectObjects(blocks);
+                const intersects = raycaster.intersectObjects(blocks.concat(ground));
                 
                 if (intersects.length > 0) {
                     if (event.button === 0) { // Left click - remove block
                         const block = intersects[0].object;
-                        scene.remove(block);
-                        blocks.splice(blocks.indexOf(block), 1);
+                        if (block !== ground) {
+                            scene.remove(block);
+                            blocks.splice(blocks.indexOf(block), 1);
+                        }
                     } else if (event.button === 2) { // Right click - add block
                         const point = intersects[0].point;
                         const normal = intersects[0].face.normal;
@@ -179,9 +223,9 @@
                         
                         // Check if not colliding with player
                         if (Math.abs(position.x - yawObject.position.x) > 1 ||
-                            Math.abs(position.y - yawObject.position.y) > 1 ||
+                            Math.abs(position.y - yawObject.position.y) > 2 ||
                             Math.abs(position.z - yawObject.position.z) > 1) {
-                            createBlock(position.x, position.y, position.z, 'dirt');
+                            createBlock(position.x, position.y, position.z, currentBlockType);
                         }
                     }
                 }
@@ -195,6 +239,24 @@
                     case 'KeyA': moveLeft = true; break;
                     case 'KeyD': moveRight = true; break;
                     case 'Space': if (canJump) { velocity.y = 5; canJump = false; } break;
+                    case 'ShiftLeft': 
+                    case 'ShiftRight': 
+                        // Break block in front
+                        raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                        const intersects = raycaster.intersectObjects(blocks);
+                        if (intersects.length > 0) {
+                            const block = intersects[0].object;
+                            scene.remove(block);
+                            blocks.splice(blocks.indexOf(block), 1);
+                        }
+                        break;
+                    case 'KeyE': 
+                        // Toggle block type
+                        const types = Object.keys(blockMaterials);
+                        const currentIndex = types.indexOf(currentBlockType);
+                        currentBlockType = types[(currentIndex + 1) % types.length];
+                        console.log('Current block type:', currentBlockType);
+                        break;
                 }
             });
             
@@ -225,25 +287,30 @@
             // Create a simple world
             function createWorld() {
                 // Create some blocks for a simple structure
-                for (let x = -5; x <= 5; x++) {
-                    for (let z = -5; z <= 5; z++) {
-                        createBlock(x, 0, z, 'grass');
+                for (let x = -10; x <= 10; x++) {
+                    for (let z = -10; z <= 10; z++) {
+                        // Create a more interesting terrain with some height variations
+                        const height = Math.floor(Math.sin(x * 0.3) * Math.cos(z * 0.3) * 2);
+                        for (let y = 0; y <= height; y++) {
+                            const blockType = y === height ? 'grass' : 'dirt';
+                            createBlock(x, y, z, blockType);
+                        }
                     }
                 }
                 
                 // Add a small structure
-                createBlock(-3, 1, -3, 'dirt');
-                createBlock(-3, 1, -2, 'dirt');
-                createBlock(-2, 1, -3, 'dirt');
-                createBlock(-2, 1, -2, 'dirt');
-                createBlock(-3, 2, -3, 'dirt');
-                createBlock(-3, 2, -2, 'dirt');
-                createBlock(-2, 2, -3, 'dirt');
-                createBlock(-2, 2, -2, 'dirt');
-                createBlock(-3, 3, -3, 'dirt');
-                createBlock(-3, 3, -2, 'dirt');
-                createBlock(-2, 3, -3, 'dirt');
-                createBlock(-2, 3, -2, 'dirt');
+                createBlock(-3, 1, -3, 'stone');
+                createBlock(-3, 1, -2, 'stone');
+                createBlock(-2, 1, -3, 'stone');
+                createBlock(-2, 1, -2, 'stone');
+                createBlock(-3, 2, -3, 'stone');
+                createBlock(-3, 2, -2, 'stone');
+                createBlock(-2, 2, -3, 'stone');
+                createBlock(-2, 2, -2, 'stone');
+                createBlock(-3, 3, -3, 'stone');
+                createBlock(-3, 3, -2, 'stone');
+                createBlock(-2, 3, -3, 'stone');
+                createBlock(-2, 3, -2, 'stone');
                 
                 // Add some trees
                 createTree(5, 1, 5);
@@ -314,6 +381,16 @@
                     canJump = true;
                 }
                 
+                // Check for block collisions (simple collision detection)
+                const playerPosition = new THREE.Vector3(
+                    Math.round(yawObject.position.x),
+                    Math.round(yawObject.position.y),
+                    Math.round(yawObject.position.z)
+                );
+                
+                // Update position display
+                document.getElementById('position').textContent = `Position: ${Math.floor(yawObject.position.x)}, ${Math.floor(yawObject.position.y)}, ${Math.floor(yawObject.position.z)}`;
+                
                 prevTime = time;
                 
                 // Render scene
@@ -331,8 +408,5 @@
             animate();
         }
     </script>
-    
-    <!-- Three.js library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" onload="document.getElementById('startButton').innerText = 'Click to Start'"></script>
 </body>
 </html>
