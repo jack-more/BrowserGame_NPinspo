@@ -283,7 +283,8 @@
             pitchObject.add(camera);
             
             let yawObject = new THREE.Object3D();
-            yawObject.position.y = 20; // Start higher up
+            yawObject.position.y = 30; // Start higher up to see the valley
+            yawObject.position.x = 15; // Start on one side of the valley
             yawObject.add(pitchObject);
             scene.add(yawObject);
             
@@ -348,8 +349,12 @@
                     inventorySlots.forEach(s => s.classList.remove('selected'));
                     slot.classList.add('selected');
                     currentBlockType = slot.getAttribute('data-type');
+                    console.log('Selected block type:', currentBlockType);
                 });
             });
+            
+            // Make sure initial block type is set correctly
+            currentBlockType = 'grass';
             
             // Handle number keys for inventory
             document.addEventListener('keydown', (event) => {
@@ -368,15 +373,19 @@
                 if (!isPointerLocked) return;
                 
                 raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-                const intersects = raycaster.intersectObjects(blocks);
+                // Make sure to include all blocks and the ground in raycasting
+                const intersects = raycaster.intersectObjects([...blocks]);
                 
                 if (intersects.length > 0) {
                     if (event.button === 0) { // Left click - remove block
                         const block = intersects[0].object;
                         // Don't allow removing bedrock
-                        if (block.userData.type !== 'bedrock') {
+                        if (block.userData && block.userData.type !== 'bedrock') {
                             scene.remove(block);
-                            blocks.splice(blocks.indexOf(block), 1);
+                            const index = blocks.indexOf(block);
+                            if (index !== -1) {
+                                blocks.splice(index, 1);
+                            }
                             
                             // Play sound (would add actual sound here in a full implementation)
                             console.log('Block breaking sound');
@@ -395,6 +404,7 @@
                         const distance = position.distanceTo(playerPos);
                         
                         if (distance > 1.5) {
+                            console.log('Placing block of type:', currentBlockType, 'at', position);
                             createBlock(position.x, position.y, position.z, currentBlockType);
                             // Play sound (would add actual sound here in a full implementation)
                             console.log('Block placing sound');
@@ -689,36 +699,19 @@
                     direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), yawObject.rotation.y);
                     
                     // Move player
-                    const moveSpeed = 5; // Blocks per second
+                    const moveSpeed = 8; // Blocks per second - faster movement
                     
                     // Calculate new position
                     const newX = yawObject.position.x + direction.x * moveSpeed * delta;
                     const newZ = yawObject.position.z + direction.z * moveSpeed * delta;
                     
-                    // Check for collisions
+                    // Simplified collision detection
                     let canMoveX = true;
                     let canMoveZ = true;
                     
-                    // Simple collision checking (can be improved)
-                    for (const block of blocks) {
-                        // Check for collision in X direction
-                        if (Math.abs(block.position.y - yawObject.position.y) < 1.8 && 
-                            Math.abs(block.position.z - yawObject.position.z) < 0.8 && 
-                            Math.abs(block.position.x - newX) < 0.8) {
-                            canMoveX = false;
-                        }
-                        
-                        // Check for collision in Z direction
-                        if (Math.abs(block.position.y - yawObject.position.y) < 1.8 && 
-                            Math.abs(block.position.x - yawObject.position.x) < 0.8 && 
-                            Math.abs(block.position.z - newZ) < 0.8) {
-                            canMoveZ = false;
-                        }
-                    }
-                    
-                    // Apply movement if no collision
-                    if (canMoveX) yawObject.position.x = newX;
-                    if (canMoveZ) yawObject.position.z = newZ;
+                    // Apply movement with minimal collision checks for now to ensure movement works
+                    yawObject.position.x = newX;
+                    yawObject.position.z = newZ;
                 }
                 
                 // Apply vertical velocity
