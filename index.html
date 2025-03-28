@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft-Style Game</title>
+    <title>Simple Minecraft Clone</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            font-family: 'Minecraft', Arial, sans-serif;
-            background-color: #000;
+            font-family: Arial, sans-serif;
         }
         #gameCanvas {
             width: 100%;
@@ -32,7 +31,7 @@
             left: 50%;
             transform: translate(-50%, -50%);
             color: white;
-            font-size: 24px;
+            font-size: 20px;
             pointer-events: none;
             z-index: 100;
         }
@@ -43,63 +42,12 @@
             transform: translate(-50%, -50%);
             padding: 20px 40px;
             font-size: 24px;
-            background-color: #5c8c1d;
+            background-color: #4CAF50;
             color: white;
             border: none;
-            border-radius: 0;
+            border-radius: 5px;
             cursor: pointer;
             z-index: 100;
-            font-family: 'Minecraft', Arial, sans-serif;
-            text-transform: uppercase;
-        }
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 24px;
-            text-align: center;
-            z-index: 100;
-        }
-        #position {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            color: white;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px;
-            border-radius: 5px;
-            z-index: 100;
-        }
-        #inventory {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 5px;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px;
-            border-radius: 5px;
-            z-index: 100;
-        }
-        .inventory-slot {
-            width: 40px;
-            height: 40px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .inventory-slot.selected {
-            border-color: #ffff00;
-            background: rgba(255, 255, 255, 0.4);
-        }
-        .inventory-icon {
-            width: 32px;
-            height: 32px;
         }
     </style>
 </head>
@@ -109,161 +57,46 @@
         WASD: Move<br>
         Mouse: Look<br>
         Click: Place/Break blocks<br>
-        Space: Jump<br>
-        Shift: Break block<br>
-        1-5: Select block
+        Space: Jump
     </div>
     <div id="crosshair">+</div>
-    <div id="loading">Loading Minecraft-Style World<br><br>Preparing terrain...</div>
-    <button id="startButton" style="display: none;">Start Game</button>
-    <div id="position">Position: 0, 0, 0</div>
-    <div id="inventory" style="display: none;">
-        <div class="inventory-slot selected" data-type="grass"><div class="inventory-icon" id="grass-icon"></div></div>
-        <div class="inventory-slot" data-type="dirt"><div class="inventory-icon" id="dirt-icon"></div></div>
-        <div class="inventory-slot" data-type="stone"><div class="inventory-icon" id="stone-icon"></div></div>
-        <div class="inventory-slot" data-type="wood"><div class="inventory-icon" id="wood-icon"></div></div>
-        <div class="inventory-slot" data-type="leaves"><div class="inventory-icon" id="leaves-icon"></div></div>
-    </div>
+    <button id="startButton">Start Game</button>
 
-    <!-- Load Three.js before our game code -->
+    <!-- Load Three.js first -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     
     <script>
-        // Wait for the DOM and Three.js to load completely
-        window.addEventListener('load', function() {
-            // Check if Three.js is loaded correctly
-            if (typeof THREE === 'undefined') {
-                document.getElementById('loading').innerHTML = 'Error: Could not load Three.js library.<br>Please check your internet connection and try again.';
-                return;
-            }
-            
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('startButton').style.display = 'block';
+        // Make sure Three.js is loaded
+        if (typeof THREE === 'undefined') {
+            console.error('Three.js failed to load. Please check your internet connection and try again.');
+            document.getElementById('startButton').textContent = 'Error: Three.js not loaded';
+            document.getElementById('startButton').style.backgroundColor = 'red';
+        } else {
             document.getElementById('startButton').addEventListener('click', startGame);
-        });
+        }
         
         function startGame() {
             document.getElementById('startButton').style.display = 'none';
-            document.getElementById('inventory').style.display = 'flex';
             
             // Set up scene
             const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x6CC7EB); // Serene blue sky
-            
-            // Create fog for distance cutoff - more atmosphere for the valley
-            scene.fog = new THREE.Fog(0x9CC7EB, 35, 80);
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue
             
             // Set up camera
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.y = 2;
             
             // Set up renderer
-            const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+            const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas') });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
             
             // Add lights
-            const ambientLight = new THREE.AmbientLight(0x777777, 1);
+            const ambientLight = new THREE.AmbientLight(0x404040, 1);
             scene.add(ambientLight);
             
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
             directionalLight.position.set(1, 1, 0.5);
             scene.add(directionalLight);
-            
-            // Create textures
-            const textureLoader = new THREE.TextureLoader();
-            
-            // Create texture for each block type - with more vibrant colors for a beautiful valley
-            const blockTextures = {
-                grass: createMinecraftTexture('#80FF20', '#8B4513'), // More vibrant grass
-                dirt: createMinecraftTexture('#8B4513', '#6B2E0E'),
-                stone: createMinecraftTexture('#9A9A9A', '#777777'), // Lighter stone
-                wood: createMinecraftTexture('#A86032', '#8B5A2B'), // More colorful wood
-                leaves: createMinecraftTexture('#26A41E', '#006400'), // Brighter leaves
-                bedrock: createMinecraftTexture('#444444', '#333333'),
-                water: createMinecraftTexture('#4A84CF', '#3366A3')  // Water texture
-            };
-            
-            // Create inventory icons
-            createInventoryIcons();
-            
-            // Function to create pixelated Minecraft-style texture
-            function createMinecraftTexture(mainColor, accentColor) {
-                const canvas = document.createElement('canvas');
-                canvas.width = 16;
-                canvas.height = 16;
-                const ctx = canvas.getContext('2d');
-                
-                // Fill with main color
-                ctx.fillStyle = mainColor;
-                ctx.fillRect(0, 0, 16, 16);
-                
-                // Add some pixel-art details
-                ctx.fillStyle = accentColor;
-                
-                // Add some random pixels for texture
-                for (let i = 0; i < 16; i++) {
-                    for (let j = 0; j < 16; j++) {
-                        if (Math.random() > 0.8) {
-                            ctx.fillRect(i, j, 1, 1);
-                        }
-                    }
-                }
-                
-                // Create the texture
-                const texture = new THREE.CanvasTexture(canvas);
-                texture.magFilter = THREE.NearestFilter;
-                texture.minFilter = THREE.NearestFilter;
-                return texture;
-            }
-            
-            // Create inventory icons
-            function createInventoryIcons() {
-                for (const type in blockTextures) {
-                    const iconElement = document.getElementById(`${type}-icon`);
-                    if (iconElement) {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 32;
-                        canvas.height = 32;
-                        const ctx = canvas.getContext('2d');
-                        
-                        // Draw a mini 3D cube
-                        const texture = blockTextures[type];
-                        
-                        // Top face (lighter)
-                        ctx.fillStyle = '#AAAAAA';
-                        ctx.beginPath();
-                        ctx.moveTo(16, 4);
-                        ctx.lineTo(28, 10);
-                        ctx.lineTo(16, 16);
-                        ctx.lineTo(4, 10);
-                        ctx.closePath();
-                        ctx.fill();
-                        
-                        // Right face (medium)
-                        ctx.fillStyle = '#888888';
-                        ctx.beginPath();
-                        ctx.moveTo(28, 10);
-                        ctx.lineTo(28, 22);
-                        ctx.lineTo(16, 28);
-                        ctx.lineTo(16, 16);
-                        ctx.closePath();
-                        ctx.fill();
-                        
-                        // Left face (darker)
-                        ctx.fillStyle = '#666666';
-                        ctx.beginPath();
-                        ctx.moveTo(4, 10);
-                        ctx.lineTo(16, 16);
-                        ctx.lineTo(16, 28);
-                        ctx.lineTo(4, 22);
-                        ctx.closePath();
-                        ctx.fill();
-                        
-                        iconElement.style.backgroundImage = `url(${canvas.toDataURL()})`;
-                    }
-                }
-            }
             
             // Variables for control
             let moveForward = false;
@@ -274,40 +107,30 @@
             let velocity = new THREE.Vector3();
             let blocks = [];
             
-            // Current block type for placement
-            let currentBlockType = 'grass';
-            
             // Mouse controls variables
             let isPointerLocked = false;
             let pitchObject = new THREE.Object3D();
             pitchObject.add(camera);
             
             let yawObject = new THREE.Object3D();
-            yawObject.position.y = 30; // Start higher up to see the valley
-            yawObject.position.x = 15; // Start on one side of the valley
+            yawObject.position.y = 2;
             yawObject.add(pitchObject);
             scene.add(yawObject);
             
-            // Create block geometry
+            // Create ground
+            const groundGeometry = new THREE.PlaneGeometry(100, 100, 1, 1);
+            const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x7CFC00 });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = 0;
+            scene.add(ground);
+            
+            // Create some blocks
             const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
-            
-            // Create block materials
-            const blockMaterials = {};
-            for (const type in blockTextures) {
-                blockMaterials[type] = new THREE.MeshLambertMaterial({ 
-                    map: blockTextures[type],
-                    transparent: type === 'leaves' ? true : false,
-                    opacity: type === 'leaves' ? 0.8 : 1
-                });
-            }
-            
-            // Block types mapping
-            const blockTypes = {
-                1: 'grass',
-                2: 'dirt',
-                3: 'stone',
-                4: 'wood',
-                5: 'leaves'
+            const blockMaterials = {
+                dirt: new THREE.MeshLambertMaterial({ color: 0x8B4513 }),
+                grass: new THREE.MeshLambertMaterial({ color: 0x7CFC00 }),
+                stone: new THREE.MeshLambertMaterial({ color: 0x808080 })
             };
             
             // Create simple world
@@ -342,53 +165,22 @@
                 }
             });
             
-            // Handle inventory selection
-            const inventorySlots = document.querySelectorAll('.inventory-slot');
-            inventorySlots.forEach(slot => {
-                slot.addEventListener('click', () => {
-                    inventorySlots.forEach(s => s.classList.remove('selected'));
-                    slot.classList.add('selected');
-                    currentBlockType = slot.getAttribute('data-type');
-                    console.log('Selected block type:', currentBlockType);
-                });
-            });
-            
-            // Make sure initial block type is set correctly
-            currentBlockType = 'grass';
-            
-            // Handle number keys for inventory
-            document.addEventListener('keydown', (event) => {
-                if (event.key >= '1' && event.key <= '5') {
-                    const index = parseInt(event.key) - 1;
-                    if (index >= 0 && index < inventorySlots.length) {
-                        inventorySlots.forEach(s => s.classList.remove('selected'));
-                        inventorySlots[index].classList.add('selected');
-                        currentBlockType = inventorySlots[index].getAttribute('data-type');
-                    }
-                }
-            });
-            
             // Handle block placement/removal
             document.addEventListener('mousedown', (event) => {
                 if (!isPointerLocked) return;
                 
                 raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-                // Make sure to include all blocks and the ground in raycasting
-                const intersects = raycaster.intersectObjects([...blocks]);
+                const intersects = raycaster.intersectObjects([...blocks, ground]);
                 
                 if (intersects.length > 0) {
                     if (event.button === 0) { // Left click - remove block
                         const block = intersects[0].object;
-                        // Don't allow removing bedrock
-                        if (block.userData && block.userData.type !== 'bedrock') {
+                        if (block !== ground) {
                             scene.remove(block);
                             const index = blocks.indexOf(block);
                             if (index !== -1) {
                                 blocks.splice(index, 1);
                             }
-                            
-                            // Play sound (would add actual sound here in a full implementation)
-                            console.log('Block breaking sound');
                         }
                     } else if (event.button === 2) { // Right click - add block
                         const point = intersects[0].point;
@@ -400,14 +192,10 @@
                             .round();
                         
                         // Check if not colliding with player
-                        const playerPos = new THREE.Vector3().copy(yawObject.position).round();
-                        const distance = position.distanceTo(playerPos);
-                        
-                        if (distance > 1.5) {
-                            console.log('Placing block of type:', currentBlockType, 'at', position);
-                            createBlock(position.x, position.y, position.z, currentBlockType);
-                            // Play sound (would add actual sound here in a full implementation)
-                            console.log('Block placing sound');
+                        if (Math.abs(position.x - yawObject.position.x) > 1 ||
+                            Math.abs(position.y - yawObject.position.y) > 1 ||
+                            Math.abs(position.z - yawObject.position.z) > 1) {
+                            createBlock(position.x, position.y, position.z, 'dirt');
                         }
                     }
                 }
@@ -420,29 +208,7 @@
                     case 'KeyS': moveBackward = true; break;
                     case 'KeyA': moveLeft = true; break;
                     case 'KeyD': moveRight = true; break;
-                    case 'Space': 
-                        if (canJump) { 
-                            velocity.y = 10; 
-                            canJump = false; 
-                            // Play jump sound
-                            console.log('Jump sound');
-                        } 
-                        break;
-                    case 'ShiftLeft': 
-                    case 'ShiftRight': 
-                        // Break block in front
-                        raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-                        const intersects = raycaster.intersectObjects(blocks);
-                        if (intersects.length > 0) {
-                            const block = intersects[0].object;
-                            if (block.userData.type !== 'bedrock') {
-                                scene.remove(block);
-                                blocks.splice(blocks.indexOf(block), 1);
-                                // Play sound
-                                console.log('Block breaking sound');
-                            }
-                        }
-                        break;
+                    case 'Space': if (canJump) { velocity.y = 5; canJump = false; } break;
                 }
             });
             
@@ -462,208 +228,32 @@
             
             // Create a block
             function createBlock(x, y, z, type) {
-                // Check if there's already a block at this position
-                for (const block of blocks) {
-                    if (block.position.x === x && block.position.y === y && block.position.z === z) {
-                        return null; // Block already exists
-                    }
-                }
-                
                 const material = blockMaterials[type] || blockMaterials.dirt;
                 const block = new THREE.Mesh(blockGeometry, material);
                 block.position.set(x, y, z);
-                block.userData = { type: type }; // Store block type
                 scene.add(block);
                 blocks.push(block);
                 return block;
             }
             
-            // Create a beautiful valley landscape
+            // Create a simple world
             function createWorld() {
-                // Generate a valley-like terrain
-                const worldSize = 48; // Larger world
-                const worldHeight = 8;
-                const valleyDepth = 10; // How deep the valley goes
-                const mountainHeight = 25; // Height of mountains
-                
-                // Create bedrock layer
-                for (let x = -worldSize/2; x < worldSize/2; x++) {
-                    for (let z = -worldSize/2; z < worldSize/2; z++) {
-                        createBlock(x, 0, z, 'bedrock');
+                // Create some blocks for a simple structure
+                for (let x = -5; x <= 5; x++) {
+                    for (let z = -5; z <= 5; z++) {
+                        createBlock(x, 0, z, 'grass');
                     }
                 }
                 
-                // Create terrain with valley and mountains
-                for (let x = -worldSize/2; x < worldSize/2; x++) {
-                    for (let z = -worldSize/2; z < worldSize/2; z++) {
-                        // Valley shape - create mountains on sides and valley in middle
-                        const distanceFromCenter = Math.sqrt(x * x + z * z);
-                        
-                        // Valley function - deeper in middle, mountains around edges
-                        let valleyFactor = Math.sin(distanceFromCenter * 0.1) * 5;
-                        
-                        // Create two parallel mountain ranges with a valley in between
-                        let mountainRange = Math.abs(x) - 5;
-                        mountainRange = mountainRange < 0 ? 0 : mountainRange;
-                        
-                        // River running through the valley
-                        const riverWidth = 3;
-                        const isRiver = Math.abs(z) < riverWidth;
-                        
-                        // Height calculation
-                        let height;
-                        
-                        if (isRiver) {
-                            // River bed is slightly above bedrock
-                            height = 3;
-                        } else {
-                            // Calculate base terrain height
-                            height = Math.floor(
-                                // Base valley shape
-                                (Math.pow(x/15, 2) + 5) +
-                                // Add some noise for natural look
-                                (Math.sin(x * 0.2) * Math.cos(z * 0.2) * 2) +
-                                // Add mountain ranges on sides
-                                mountainRange * 0.7
-                            );
-                            
-                            // Additional height variations
-                            height += Math.sin(x * 0.05) * Math.sin(z * 0.05) * 3;
-                        }
-                        
-                        // Ensure minimum height
-                        height = Math.max(3, height);
-                        
-                        // Create stone layer
-                        for (let y = 1; y <= height - 3; y++) {
-                            createBlock(x, y, z, 'stone');
-                        }
-                        
-                        // Create dirt layer (except for river)
-                        if (!isRiver) {
-                            for (let y = height - 2; y < height; y++) {
-                                createBlock(x, y, z, 'dirt');
-                            }
-                            
-                            // Create grass on top (except for river)
-                            createBlock(x, height, z, 'grass');
-                            
-                            // Add trees on flat areas, but not too close to river
-                            if (Math.random() > 0.98 && Math.abs(z) > riverWidth + 2 && 
-                                Math.abs(x + 1) - Math.abs(x) < 0.1) {
-                                createTree(x, height + 1, z);
-                            }
-                        } else {
-                            // Create water blocks for the river (TODO: would add actual water in full game)
-                            for (let y = 3; y <= 4; y++) {
-                                // Blue-tinted stone for water
-                                const block = createBlock(x, y, z, 'stone');
-                                if (block) {
-                                    block.material.color.setHex(0x3333AA);
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Add some decorative elements to make the valley more beautiful
-                
-                // Forest clusters on hillsides
-                for (let i = 0; i < 10; i++) {
-                    const clusterX = Math.floor(Math.random() * worldSize - worldSize/2);
-                    const clusterZ = Math.floor(Math.random() * worldSize - worldSize/2);
-                    
-                    // Find top block at this position
-                    let topY = 0;
-                    for (const block of blocks) {
-                        if (block.position.x === clusterX && block.position.z === clusterZ && 
-                            block.position.y > topY && block.userData.type === 'grass') {
-                            topY = block.position.y;
-                        }
-                    }
-                    
-                    if (topY > 0) {
-                        // Create a cluster of trees
-                        for (let j = 0; j < 5; j++) {
-                            const treeX = clusterX + Math.floor(Math.random() * 8) - 4;
-                            const treeZ = clusterZ + Math.floor(Math.random() * 8) - 4;
-                            
-                            // Find top block at this tree position
-                            let treeTopY = 0;
-                            for (const block of blocks) {
-                                if (block.position.x === treeX && block.position.z === treeZ && 
-                                    block.position.y > treeTopY && block.userData.type === 'grass') {
-                                    treeTopY = block.position.y;
-                                }
-                            }
-                            
-                            if (treeTopY > 0) {
-                                createTree(treeX, treeTopY + 1, treeZ);
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Create a Minecraft-style tree - with two different tree types for variety
-            function createTree(x, y, z) {
-                // Randomly choose between oak and birch trees
-                const treeType = Math.random() > 0.3 ? 'oak' : 'birch';
-                
-                // Trunk
-                const trunkHeight = 4 + Math.floor(Math.random() * 3);
-                
-                // Different wood colors based on tree type
-                const trunkMaterial = treeType === 'oak' ? 'wood' : 'stone';
-                
-                for (let i = 0; i < trunkHeight; i++) {
-                    const trunk = createBlock(x, y + i, z, trunkMaterial);
-                    
-                    // For birch trees, make the trunk white
-                    if (treeType === 'birch' && trunk) {
-                        trunk.material.color.setHex(0xEEEEDD);
-                    }
-                }
-                
-                // Leaves - different shapes based on tree type
-                if (treeType === 'oak') {
-                    // Oak tree - round canopy
-                    for (let dx = -2; dx <= 2; dx++) {
-                        for (let dz = -2; dz <= 2; dz++) {
-                            for (let dy = 0; dy <= 2; dy++) {
-                                // Skip corners for a more rounded look
-                                if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-                                
-                                createBlock(x + dx, y + trunkHeight - 1 + dy, z + dz, 'leaves');
-                            }
-                        }
-                    }
-                    
-                    // Top leaves
-                    createBlock(x, y + trunkHeight + 2, z, 'leaves');
-                    createBlock(x + 1, y + trunkHeight + 2, z, 'leaves');
-                    createBlock(x - 1, y + trunkHeight + 2, z, 'leaves');
-                    createBlock(x, y + trunkHeight + 2, z + 1, 'leaves');
-                    createBlock(x, y + trunkHeight + 2, z - 1, 'leaves');
-                } else {
-                    // Birch tree - taller and more cone-shaped
-                    for (let level = 0; level < 5; level++) {
-                        const radius = Math.max(0, 3 - level);
-                        for (let dx = -radius; dx <= radius; dx++) {
-                            for (let dz = -radius; dz <= radius; dz++) {
-                                // Skip corners for a more rounded look
-                                if (dx*dx + dz*dz > radius*radius) continue;
-                                
-                                const leaves = createBlock(x + dx, y + trunkHeight + level, z + dz, 'leaves');
-                                
-                                // Make birch leaves slightly lighter green
-                                if (leaves) {
-                                    leaves.material.color.setHex(0x88C148);
-                                }
-                            }
-                        }
-                    }
-                }
+                // Add a small structure
+                createBlock(-3, 1, -3, 'dirt');
+                createBlock(-3, 1, -2, 'dirt');
+                createBlock(-2, 1, -3, 'dirt');
+                createBlock(-2, 1, -2, 'dirt');
+                createBlock(-3, 2, -3, 'dirt');
+                createBlock(-3, 2, -2, 'dirt');
+                createBlock(-2, 2, -3, 'dirt');
+                createBlock(-2, 2, -2, 'dirt');
             }
             
             // Movement physics
@@ -673,16 +263,11 @@
             function animate() {
                 requestAnimationFrame(animate);
                 
-                if (!isPointerLocked) {
-                    renderer.render(scene, camera);
-                    return;
-                }
-                
                 const time = performance.now();
                 const delta = (time - prevTime) / 1000;
                 
                 // Apply gravity
-                velocity.y -= 20 * delta; // Minecraft-like gravity
+                velocity.y -= 9.8 * delta;
                 
                 // Handle movement
                 const direction = new THREE.Vector3();
@@ -699,50 +284,19 @@
                     direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), yawObject.rotation.y);
                     
                     // Move player
-                    const moveSpeed = 8; // Blocks per second - faster movement
-                    
-                    // Calculate new position
-                    const newX = yawObject.position.x + direction.x * moveSpeed * delta;
-                    const newZ = yawObject.position.z + direction.z * moveSpeed * delta;
-                    
-                    // Simplified collision detection
-                    let canMoveX = true;
-                    let canMoveZ = true;
-                    
-                    // Apply movement with minimal collision checks for now to ensure movement works
-                    yawObject.position.x = newX;
-                    yawObject.position.z = newZ;
+                    yawObject.position.x += direction.x * 5 * delta;
+                    yawObject.position.z += direction.z * 5 * delta;
                 }
                 
                 // Apply vertical velocity
                 yawObject.position.y += velocity.y * delta;
                 
-                // Check for collision with ground or blocks in Y direction
-                let groundCollision = false;
-                
-                for (const block of blocks) {
-                    if (Math.abs(block.position.x - yawObject.position.x) < 0.8 &&
-                        Math.abs(block.position.z - yawObject.position.z) < 0.8 &&
-                        block.position.y + 1 > yawObject.position.y - 1.7 &&
-                        block.position.y < yawObject.position.y) {
-                        
-                        yawObject.position.y = block.position.y + 1.7;
-                        velocity.y = 0;
-                        canJump = true;
-                        groundCollision = true;
-                        break;
-                    }
-                }
-                
-                // Bedrock bottom limit
-                if (yawObject.position.y < 2 && !groundCollision) {
-                    yawObject.position.y = 2;
+                // Check for ground collision
+                if (yawObject.position.y < 2) {
                     velocity.y = 0;
+                    yawObject.position.y = 2;
                     canJump = true;
                 }
-                
-                // Update position display
-                document.getElementById('position').textContent = `Position: ${Math.floor(yawObject.position.x)}, ${Math.floor(yawObject.position.y)}, ${Math.floor(yawObject.position.z)}`;
                 
                 prevTime = time;
                 
