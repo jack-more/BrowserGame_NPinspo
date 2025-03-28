@@ -97,6 +97,23 @@
             border-radius: 10px;
             transition: width 0.3s;
         }
+        #errorMessage {
+            color: red;
+            margin-top: 10px;
+            max-width: 80%;
+            text-align: center;
+        }
+        #startButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -120,13 +137,12 @@
             <div id="loadingBarFill"></div>
         </div>
         <p id="loadingText">Preparing terrain...</p>
+        <div id="errorMessage"></div>
+        <button id="startButton">Start Anyway</button>
     </div>
 
-    <!-- Import Three.js -->
+    <!-- Import Three.js - All from same CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
-
     <script>
         // Game variables
         let scene, camera, renderer, controls;
@@ -143,123 +159,128 @@
         let playerSpeed = 10;
         let cubeSize = 1;
         let selectedBlockType = 'grass';
+        let errorOccurred = false;
         
-        // Textures for different block types
-        const textureURLs = {
-            dirt: 'https://raw.githubusercontent.com/greggman/webgl-fundamentals/master/webgl/lessons/resources/images/minecraft/dirt.png',
-            grass_top: 'https://raw.githubusercontent.com/greggman/webgl-fundamentals/master/webgl/lessons/resources/images/minecraft/grass_top.png',
-            grass_side: 'https://raw.githubusercontent.com/greggman/webgl-fundamentals/master/webgl/lessons/resources/images/minecraft/grass_side.png',
-            stone: 'https://raw.githubusercontent.com/greggman/webgl-fundamentals/master/webgl/lessons/resources/images/minecraft/stone.png',
-            sand: 'https://raw.githubusercontent.com/greggman/webgl-fundamentals/master/webgl/lessons/resources/images/minecraft/sand.png',
-            log_side: 'https://raw.githubusercontent.com/greggman/webgl-fundamentals/master/webgl/lessons/resources/images/minecraft/log_oak.png',
-            log_top: 'https://raw.githubusercontent.com/greggman/webgl-fundamentals/master/webgl/lessons/resources/images/minecraft/log_oak_top.png',
-            leaves: 'https://raw.githubusercontent.com/greggman/webgl-fundamentals/master/webgl/lessons/resources/images/minecraft/leaves_oak.png'
+        // Block colors for when textures fail to load
+        const blockColors = {
+            grass: 0x7CFC00, // Bright green
+            dirt: 0x8B4513,  // Brown
+            stone: 0x808080, // Gray
+            sand: 0xFFD700,  // Gold
+            wood: 0xA0522D,  // Sienna
+            leaves: 0x228B22  // Forest green
         };
 
-        // Block types data
-        const blockTypes = {
-            grass: {
-                name: 'Grass',
-                textures: {
-                    top: 'grass_top',
-                    bottom: 'dirt',
-                    sides: 'grass_side'
-                }
-            },
-            dirt: {
-                name: 'Dirt',
-                textures: {
-                    all: 'dirt'
-                }
-            },
-            stone: {
-                name: 'Stone',
-                textures: {
-                    all: 'stone'
-                }
-            },
-            sand: {
-                name: 'Sand',
-                textures: {
-                    all: 'sand'
-                }
-            },
-            wood: {
-                name: 'Wood',
-                textures: {
-                    top: 'log_top',
-                    bottom: 'log_top',
-                    sides: 'log_side'
-                }
-            },
-            leaves: {
-                name: 'Leaves',
-                textures: {
-                    all: 'leaves'
-                }
+        // Implement PointerLockControls manually since loading it might fail
+        class PointerLockControls {
+            constructor(camera, domElement) {
+                this.camera = camera;
+                this.domElement = domElement;
+                this.isLocked = false;
+                
+                this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
+                this.vec = new THREE.Vector3();
+                
+                this.onMouseMoveBound = this.onMouseMove.bind(this);
+                this.onPointerlockChangeBound = this.onPointerlockChange.bind(this);
+                
+                this.connect();
             }
-        };
-
-        // Load textures
-        function loadTextures() {
-            const textureLoader = new THREE.TextureLoader();
-            const loadedTextures = {};
-            let totalTextures = Object.keys(textureURLs).length;
-            let loadedCount = 0;
-
-            return new Promise((resolve) => {
-                for (const [name, url] of Object.entries(textureURLs)) {
-                    textureLoader.load(url, (texture) => {
-                        // Apply pixelated texture filtering
-                        texture.magFilter = THREE.NearestFilter;
-                        texture.minFilter = THREE.NearestFilter;
-                        loadedTextures[name] = texture;
-                        
-                        loadedCount++;
-                        updateLoadingBar(loadedCount / totalTextures * 0.2); // 20% of loading is textures
-                        
-                        if (loadedCount === totalTextures) {
-                            resolve(loadedTextures);
-                        }
-                    });
-                }
-            });
+            
+            connect() {
+                document.addEventListener('mousemove', this.onMouseMoveBound);
+                document.addEventListener('pointerlockchange', this.onPointerlockChangeBound);
+            }
+            
+            disconnect() {
+                document.removeEventListener('mousemove', this.onMouseMoveBound);
+                document.removeEventListener('pointerlockchange', this.onPointerlockChangeBound);
+            }
+            
+            lock() {
+                this.domElement.requestPointerLock();
+            }
+            
+            unlock() {
+                document.exitPointerLock();
+            }
+            
+            onPointerlockChange() {
+                this.isLocked = document.pointerLockElement === this.domElement;
+            }
+            
+            onMouseMove(event) {
+                if (!this.isLocked) return;
+                
+                const movementX = event.movementX || 0;
+                const movementY = event.movementY || 0;
+                
+                this.euler.setFromQuaternion(this.camera.quaternion);
+                
+                this.euler.y -= movementX * 0.002;
+                this.euler.x -= movementY * 0.002;
+                
+                this.euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.euler.x));
+                
+                this.camera.quaternion.setFromEuler(this.euler);
+            }
+            
+            moveRight(distance) {
+                this.vec.setFromMatrixColumn(this.camera.matrix, 0);
+                this.camera.position.addScaledVector(this.vec, distance);
+            }
+            
+            moveForward(distance) {
+                this.vec.setFromMatrixColumn(this.camera.matrix, 0);
+                this.vec.crossVectors(this.camera.up, this.vec);
+                this.camera.position.addScaledVector(this.vec, distance);
+            }
+        }
+        
+        // Create a fallback texture with a colored pattern
+        function createFallbackTexture(color) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            
+            // Fill with base color
+            ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+            ctx.fillRect(0, 0, 16, 16);
+            
+            // Add a grid pattern
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, 8);
+            ctx.lineTo(16, 8);
+            ctx.moveTo(8, 0);
+            ctx.lineTo(8, 16);
+            ctx.stroke();
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
         }
 
-        // Create materials for each block type
-        function createBlockMaterials(textures) {
+        // Create materials for each block type using colors
+        function createColorBlockMaterials() {
             const materials = {};
-
-            // Process each block type
-            for (const [blockType, blockData] of Object.entries(blockTypes)) {
-                if (blockData.textures.all) {
-                    // Same texture on all sides
-                    const texture = textures[blockData.textures.all];
-                    materials[blockType] = [
-                        new THREE.MeshLambertMaterial({ map: texture }), // right
-                        new THREE.MeshLambertMaterial({ map: texture }), // left
-                        new THREE.MeshLambertMaterial({ map: texture }), // top
-                        new THREE.MeshLambertMaterial({ map: texture }), // bottom
-                        new THREE.MeshLambertMaterial({ map: texture }), // front
-                        new THREE.MeshLambertMaterial({ map: texture })  // back
-                    ];
-                } else {
-                    // Different textures for different sides
-                    const top = textures[blockData.textures.top];
-                    const bottom = textures[blockData.textures.bottom || blockData.textures.top];
-                    const sides = textures[blockData.textures.sides || blockData.textures.top];
-                    
-                    materials[blockType] = [
-                        new THREE.MeshLambertMaterial({ map: sides }), // right
-                        new THREE.MeshLambertMaterial({ map: sides }), // left
-                        new THREE.MeshLambertMaterial({ map: top }),   // top
-                        new THREE.MeshLambertMaterial({ map: bottom }), // bottom
-                        new THREE.MeshLambertMaterial({ map: sides }), // front
-                        new THREE.MeshLambertMaterial({ map: sides })  // back
-                    ];
-                }
+            
+            for (const [blockType, color] of Object.entries(blockColors)) {
+                const texture = createFallbackTexture(color);
+                
+                materials[blockType] = [
+                    new THREE.MeshLambertMaterial({ map: texture }), // right
+                    new THREE.MeshLambertMaterial({ map: texture }), // left
+                    new THREE.MeshLambertMaterial({ map: texture }), // top
+                    new THREE.MeshLambertMaterial({ map: texture }), // bottom
+                    new THREE.MeshLambertMaterial({ map: texture }), // front
+                    new THREE.MeshLambertMaterial({ map: texture })  // back
+                ];
             }
-
+            
             return materials;
         }
 
@@ -268,105 +289,123 @@
             document.getElementById('loadingBarFill').style.width = `${Math.min(100, percentage * 100)}%`;
         }
 
+        // Display error message
+        function showError(message) {
+            const errorElement = document.getElementById('errorMessage');
+            errorElement.textContent = message;
+            errorOccurred = true;
+            
+            // Show the start button to bypass the error
+            document.getElementById('startButton').style.display = 'block';
+        }
+
         // Initialize Three.js scene
         async function init() {
-            // Load textures first
-            document.getElementById('loadingText').textContent = 'Loading textures...';
-            const textures = await loadTextures();
-            
-            // Set up block materials
-            blockMaterials = createBlockMaterials(textures);
-
-            document.getElementById('loadingText').textContent = 'Setting up 3D world...';
-            
-            // Create a scene
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // Sky blue color
-            
-            // Create a fog effect
-            scene.fog = new THREE.Fog(0x87CEEB, 50, 100);
-            
-            // Create a perspective camera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.y = playerHeight;
-            
-            // Create a renderer
-            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: false });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            
-            // Add pointer lock controls for mouse look
-            controls = new THREE.PointerLockControls(camera, document.body);
-            
-            // Setup click to start
-            document.addEventListener('click', () => {
-                if (!controls.isLocked) {
-                    controls.lock();
-                }
-            });
-            
-            // Handle pointer lock state changes
-            controls.addEventListener('lock', () => {
-                document.getElementById('instructions').style.display = 'none';
-            });
-            
-            controls.addEventListener('unlock', () => {
-                document.getElementById('instructions').style.display = 'block';
-            });
-            
-            // Add lights to the scene
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-            
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(1, 1, 0.5).normalize();
-            scene.add(directionalLight);
-            
-            // Set up raycaster for block interaction
-            raycaster = new THREE.Raycaster();
-            mouse = new THREE.Vector2();
-            
-            // Create a cube geometry for blocks
-            blockGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
-            
-            // Generate terrain
-            await generateTerrain();
-            
-            // Set up block selector
-            setupBlockSelector();
-            
-            // Add event listeners
-            setupEventListeners();
-            
-            // Hide loading screen
-            document.getElementById('loading').style.display = 'none';
-            
-            // Start animation loop
-            animate();
+            try {
+                // Prepare fallback materials first
+                blockMaterials = createColorBlockMaterials();
+                
+                document.getElementById('loadingText').textContent = 'Setting up 3D world...';
+                updateLoadingBar(0.3);
+                
+                // Create a scene
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x87CEEB); // Sky blue color
+                
+                // Create a fog effect
+                scene.fog = new THREE.Fog(0x87CEEB, 50, 100);
+                
+                // Create a perspective camera
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.y = playerHeight;
+                
+                // Create a renderer
+                renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: false });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                
+                // Add pointer lock controls
+                controls = new PointerLockControls(camera, document.body);
+                
+                // Setup click to start
+                document.addEventListener('click', () => {
+                    if (!controls.isLocked) {
+                        controls.lock();
+                    }
+                });
+                
+                // Handle pointer lock state changes
+                document.addEventListener('pointerlockchange', () => {
+                    const instructionsElement = document.getElementById('instructions');
+                    if (document.pointerLockElement === document.body) {
+                        instructionsElement.style.display = 'none';
+                    } else {
+                        instructionsElement.style.display = 'block';
+                    }
+                });
+                
+                // Add lights to the scene
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(1, 1, 0.5).normalize();
+                scene.add(directionalLight);
+                
+                // Set up raycaster for block interaction
+                raycaster = new THREE.Raycaster();
+                mouse = new THREE.Vector2();
+                
+                // Create a cube geometry for blocks
+                blockGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+                
+                updateLoadingBar(0.5);
+                
+                // Generate terrain
+                await generateTerrain();
+                
+                // Set up block selector
+                setupBlockSelector();
+                
+                // Add event listeners
+                setupEventListeners();
+                
+                updateLoadingBar(1.0);
+                
+                // Hide loading screen
+                document.getElementById('loading').style.display = 'none';
+                
+                // Start animation loop
+                animate();
+            } catch (error) {
+                console.error("Error initializing game:", error);
+                showError("There was an error initializing the game. You can try starting anyway, but some features may not work properly.");
+            }
         }
         
-        // Generate terrain using simplex noise
+        // Generate terrain using a simpler method
         async function generateTerrain() {
             document.getElementById('loadingText').textContent = 'Generating terrain...';
             
-            const simplex = new SimplexNoise();
-            const worldSize = 64; // Size of the world
-            const worldHeight = 32; // Maximum height of the terrain
+            const worldSize = 32; // Smaller world size for better performance
+            const worldHeight = 16; // Maximum height of the terrain
+            
+            // Helper function for noise
+            function noise(x, z) {
+                return Math.sin(x * 0.1) * Math.cos(z * 0.1) * 0.5 + 0.5; 
+            }
             
             for (let x = 0; x < worldSize; x++) {
                 for (let z = 0; z < worldSize; z++) {
-                    // Update loading progress
-                    if ((x * worldSize + z) % 100 === 0) {
-                        updateLoadingBar(0.2 + 0.8 * ((x * worldSize + z) / (worldSize * worldSize)));
+                    // Update loading progress occasionally
+                    if ((x * worldSize + z) % 200 === 0) {
+                        updateLoadingBar(0.5 + 0.5 * ((x * worldSize + z) / (worldSize * worldSize)));
                         // Allow UI to update
                         await new Promise(resolve => setTimeout(resolve, 0));
                     }
                     
-                    // Generate height using simplex noise
-                    const height = Math.floor(
-                        (simplex.noise2D(x / 16, z / 16) * 0.5 + 0.5) * 10 + 
-                        (simplex.noise2D(x / 8, z / 8) * 0.25 + 0.25) * 4
-                    );
+                    // Generate height using simple noise function
+                    const height = Math.floor(noise(x, z) * 8) + 1;
                     
                     // Place blocks based on height
                     for (let y = 0; y < height; y++) {
@@ -382,8 +421,8 @@
                         createBlock(x - worldSize/2, y, z - worldSize/2, blockType);
                     }
                     
-                    // Randomly add trees
-                    if (Math.random() < 0.01) {
+                    // Randomly add trees (less frequently)
+                    if (Math.random() < 0.005) {
                         createTree(x - worldSize/2, height, z - worldSize/2);
                     }
                 }
@@ -392,7 +431,7 @@
         
         // Create a tree at the specified position
         function createTree(x, y, z) {
-            const trunkHeight = 4 + Math.floor(Math.random() * 3);
+            const trunkHeight = 3 + Math.floor(Math.random() * 2);
             
             // Create trunk
             for (let i = 0; i < trunkHeight; i++) {
@@ -402,14 +441,14 @@
             // Create leaves
             const leafSize = 2;
             for (let lx = -leafSize; lx <= leafSize; lx++) {
-                for (let ly = 0; ly <= leafSize + 1; ly++) {
+                for (let ly = 0; ly <= leafSize; ly++) {
                     for (let lz = -leafSize; lz <= leafSize; lz++) {
                         // Skip trunk positions
                         if (lx === 0 && lz === 0 && ly < trunkHeight - 1) continue;
                         
                         // Make leaves roughly spherical
                         const distance = Math.sqrt(lx*lx + ly*ly + lz*lz);
-                        if (distance <= leafSize + 0.5 + Math.random() * 0.5) {
+                        if (distance <= leafSize + 0.5) {
                             createBlock(x + lx, y + trunkHeight - 1 + ly, z + lz, 'leaves');
                         }
                     }
@@ -449,23 +488,13 @@
         // Set up block selector
         function setupBlockSelector() {
             const blockSelector = document.getElementById('blockSelector');
+            blockSelector.innerHTML = ''; // Clear any existing content
             
-            for (const [type, data] of Object.entries(blockTypes)) {
+            for (const [type, _] of Object.entries(blockColors)) {
                 const blockOption = document.createElement('div');
                 blockOption.className = 'block-option';
                 blockOption.dataset.type = type;
-                
-                // Use the correct texture for the display
-                let textureKey;
-                if (data.textures.all) {
-                    textureKey = data.textures.all;
-                } else if (data.textures.top) {
-                    textureKey = data.textures.top;
-                } else {
-                    textureKey = Object.values(data.textures)[0];
-                }
-                
-                blockOption.style.backgroundImage = `url(${textureURLs[textureKey]})`;
+                blockOption.style.backgroundColor = '#' + blockColors[type].toString(16).padStart(6, '0');
                 
                 if (type === selectedBlockType) {
                     blockOption.classList.add('selected');
@@ -531,10 +560,16 @@
                     if (event.button === 0) {  // Left click - remove block
                         removeBlock(block.userData.x, block.userData.y, block.userData.z);
                     } else if (event.button === 2) {  // Right click - add block
-                        // Get the face that was clicked
-                        const faceIndex = intersect.faceIndex;
-                        const normalMatrix = new THREE.Matrix3().getNormalMatrix(block.matrixWorld);
-                        const normal = intersect.face.normal.clone().applyMatrix3(normalMatrix).normalize();
+                        // Calculate position for new block based on face normal
+                        const faceIndex = Math.floor(intersect.faceIndex / 2);
+                        const normal = [
+                            new THREE.Vector3(1, 0, 0),
+                            new THREE.Vector3(-1, 0, 0),
+                            new THREE.Vector3(0, 1, 0),
+                            new THREE.Vector3(0, -1, 0),
+                            new THREE.Vector3(0, 0, 1),
+                            new THREE.Vector3(0, 0, -1)
+                        ][faceIndex];
                         
                         // Calculate position for new block
                         const x = block.userData.x + normal.x;
@@ -573,6 +608,12 @@
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
                 renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // Start button click handler
+            document.getElementById('startButton').addEventListener('click', () => {
+                document.getElementById('loading').style.display = 'none';
+                animate();
             });
         }
         
@@ -637,8 +678,16 @@
             prevTime = time;
         }
         
+        // Handle errors
+        window.addEventListener('error', (event) => {
+            showError(`Error: ${event.message}`);
+        });
+        
         // Start the game
-        init();
+        init().catch(error => {
+            console.error("Fatal error:", error);
+            showError(`Fatal error: ${error.message || 'Unknown error'}`);
+        });
     </script>
 </body>
 </html>
