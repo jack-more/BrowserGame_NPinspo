@@ -168,7 +168,9 @@
             stone: 0x808080, // Gray
             sand: 0xFFD700,  // Gold
             wood: 0xA0522D,  // Sienna
-            leaves: 0x228B22  // Forest green
+            leaves: 0x228B22, // Forest green
+            water: 0x4169E1,  // Royal blue
+            snow: 0xFFFFFF   // White
         };
 
         // Implement PointerLockControls manually since loading it might fail
@@ -264,12 +266,137 @@
             return texture;
         }
 
-        // Create materials for each block type using colors
+        // Create more detailed grass texture
+        function createGrassTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            
+            // Base green
+            ctx.fillStyle = '#7CFC00';
+            ctx.fillRect(0, 0, 16, 16);
+            
+            // Add some texture
+            for (let i = 0; i < 20; i++) {
+                ctx.fillStyle = '#' + (Math.random() > 0.5 ? '8BC34A' : '4CAF50');
+                const x = Math.floor(Math.random() * 16);
+                const y = Math.floor(Math.random() * 16);
+                const size = Math.random() * 3 + 1;
+                ctx.fillRect(x, y, size, size);
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        // Create detailed wood texture
+        function createWoodTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            
+            // Base brown
+            ctx.fillStyle = '#A0522D';
+            ctx.fillRect(0, 0, 16, 16);
+            
+            // Add grain lines
+            ctx.fillStyle = '#8B4513';
+            for (let i = 0; i < 5; i++) {
+                const y = Math.floor(Math.random() * 16);
+                ctx.fillRect(0, y, 16, 1);
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        // Create water texture
+        function createWaterTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            
+            // Base blue
+            ctx.fillStyle = '#4169E1';
+            ctx.fillRect(0, 0, 16, 16);
+            
+            // Add some wave patterns
+            ctx.fillStyle = '#6495ED';
+            for (let i = 0; i < 5; i++) {
+                const y = Math.floor(Math.random() * 16);
+                ctx.fillRect(0, y, 16, 1);
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        // Create snow texture
+        function createSnowTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            
+            // Base white
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, 16, 16);
+            
+            // Add some sparkles
+            ctx.fillStyle = '#E6E6E6';
+            for (let i = 0; i < 10; i++) {
+                const x = Math.floor(Math.random() * 16);
+                const y = Math.floor(Math.random() * 16);
+                const size = Math.random() * 2 + 1;
+                ctx.fillRect(x, y, size, size);
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        // Create materials for each block type using texture functions
         function createColorBlockMaterials() {
             const materials = {};
             
+            // Create specialized textures
+            const grassTexture = createGrassTexture();
+            const woodTexture = createWoodTexture();
+            const waterTexture = createWaterTexture();
+            const snowTexture = createSnowTexture();
+            
+            // Create materials for each block type
             for (const [blockType, color] of Object.entries(blockColors)) {
-                const texture = createFallbackTexture(color);
+                let texture;
+                
+                // Use specialized textures for specific block types
+                switch(blockType) {
+                    case 'grass':
+                        texture = grassTexture;
+                        break;
+                    case 'wood':
+                        texture = woodTexture;
+                        break;
+                    case 'water':
+                        texture = waterTexture;
+                        break;
+                    case 'snow':
+                        texture = snowTexture;
+                        break;
+                    default:
+                        texture = createFallbackTexture(color);
+                }
                 
                 materials[blockType] = [
                     new THREE.MeshLambertMaterial({ map: texture }), // right
@@ -299,6 +426,18 @@
             document.getElementById('startButton').style.display = 'block';
         }
 
+        // Seed-based pseudo-random number generator for consistent terrain
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            next() {
+                this.seed = (this.seed * 9301 + 49297) % 233280;
+                return this.seed / 233280;
+            }
+        }
+
         // Initialize Three.js scene
         async function init() {
             try {
@@ -313,11 +452,11 @@
                 scene.background = new THREE.Color(0x87CEEB); // Sky blue color
                 
                 // Create a fog effect
-                scene.fog = new THREE.Fog(0x87CEEB, 50, 100);
+                scene.fog = new THREE.Fog(0x87CEEB, 70, 100);
                 
                 // Create a perspective camera
                 camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.y = playerHeight;
+                camera.position.set(0, playerHeight + 10, 0); // Start a bit higher for a better view
                 
                 // Create a renderer
                 renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: false });
@@ -383,72 +522,162 @@
             }
         }
         
-        // Generate terrain using a simpler method
-        async function generateTerrain() {
-            document.getElementById('loadingText').textContent = 'Generating terrain...';
+        // Add a house at the specified location
+        function createHouse(x, y, z) {
+            const width = 5;
+            const length = 7;
+            const height = 4;
             
-            const worldSize = 32; // Smaller world size for better performance
-            const worldHeight = 16; // Maximum height of the terrain
-            
-            // Helper function for noise
-            function noise(x, z) {
-                return Math.sin(x * 0.1) * Math.cos(z * 0.1) * 0.5 + 0.5; 
+            // Base/foundation
+            for (let dx = 0; dx < width; dx++) {
+                for (let dz = 0; dz < length; dz++) {
+                    createBlock(x + dx, y, z + dz, 'stone');
+                }
             }
             
-            for (let x = 0; x < worldSize; x++) {
-                for (let z = 0; z < worldSize; z++) {
-                    // Update loading progress occasionally
-                    if ((x * worldSize + z) % 200 === 0) {
-                        updateLoadingBar(0.5 + 0.5 * ((x * worldSize + z) / (worldSize * worldSize)));
-                        // Allow UI to update
-                        await new Promise(resolve => setTimeout(resolve, 0));
-                    }
-                    
-                    // Generate height using simple noise function
-                    const height = Math.floor(noise(x, z) * 8) + 1;
-                    
-                    // Place blocks based on height
-                    for (let y = 0; y < height; y++) {
-                        let blockType;
-                        if (y === height - 1) {
-                            blockType = 'grass';
-                        } else if (y > height - 4) {
-                            blockType = 'dirt';
-                        } else {
-                            blockType = 'stone';
-                        }
-                        
-                        createBlock(x - worldSize/2, y, z - worldSize/2, blockType);
-                    }
-                    
-                    // Randomly add trees (less frequently)
-                    if (Math.random() < 0.005) {
-                        createTree(x - worldSize/2, height, z - worldSize/2);
+            // Walls
+            for (let dx = 0; dx < width; dx++) {
+                for (let dy = 1; dy < height; dy++) {
+                    createBlock(x + dx, y + dy, z, 'wood'); // Front wall
+                    createBlock(x + dx, y + dy, z + length - 1, 'wood'); // Back wall
+                }
+            }
+            
+            for (let dz = 1; dz < length - 1; dz++) {
+                for (let dy = 1; dy < height; dy++) {
+                    createBlock(x, y + dy, z + dz, 'wood'); // Left wall
+                    createBlock(x + width - 1, y + dy, z + dz, 'wood'); // Right wall
+                }
+            }
+            
+            // Door
+            createBlock(x + Math.floor(width/2), y + 1, z, null); // Remove block for door
+            createBlock(x + Math.floor(width/2), y + 2, z, null); // Remove block for door
+            
+            // Windows
+            createBlock(x + 1, y + 2, z, null); // Front window
+            createBlock(x + width - 2, y + 2, z, null); // Front window
+            
+            // Roof
+            for (let dx = 0; dx < width; dx++) {
+                for (let dz = 0; dz < length; dz++) {
+                    createBlock(x + dx, y + height, z + dz, 'wood');
+                }
+            }
+            
+            // Chimney
+            createBlock(x + 1, y + height + 1, z + 1, 'stone');
+            createBlock(x + 1, y + height + 2, z + 1, 'stone');
+        }
+        
+        // Add a small pond
+        function createPond(x, y, z, size) {
+            for (let dx = -size; dx <= size; dx++) {
+                for (let dz = -size; dz <= size; dz++) {
+                    // Create a roughly circular pond
+                    if (dx*dx + dz*dz <= size*size) {
+                        createBlock(x + dx, y, z + dz, 'water');
                     }
                 }
             }
         }
         
-        // Create a tree at the specified position
+        // Add a mountain
+        function createMountain(x, y, z, height, radius) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dz = -radius; dz <= radius; dz++) {
+                    const distSq = dx*dx + dz*dz;
+                    if (distSq <= radius*radius) {
+                        // Calculate height based on distance from center
+                        const h = Math.floor(height * (1 - Math.sqrt(distSq) / radius));
+                        
+                        for (let dy = 0; dy < h; dy++) {
+                            let blockType;
+                            
+                            // Add snow at the top for mountains
+                            if (dy > h * 0.8) {
+                                blockType = 'snow';
+                            } else if (dy > h * 0.3) {
+                                blockType = 'stone';
+                            } else {
+                                blockType = 'dirt';
+                            }
+                            
+                            createBlock(x + dx, y + dy, z + dz, blockType);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Generate improved terrain inspired by the image
+        async function generateTerrain() {
+            document.getElementById('loadingText').textContent = 'Generating terrain...';
+            
+            const worldSize = 64; // Larger world size
+            const seed = Math.floor(Math.random() * 10000);
+            const random = new SeededRandom(seed);
+            
+            // First create a flat grassy area
+            for (let x = -worldSize/2; x < worldSize/2; x++) {
+                for (let z = -worldSize/2; z < worldSize/2; z++) {
+                    // Update loading progress occasionally
+                    if (((x + worldSize/2) * worldSize + (z + worldSize/2)) % 500 === 0) {
+                        const progress = ((x + worldSize/2) * worldSize + (z + worldSize/2)) / (worldSize * worldSize);
+                        updateLoadingBar(0.5 + 0.5 * progress);
+                        // Allow UI to update
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                    
+                    createBlock(x, 0, z, 'grass');
+                }
+            }
+            
+            // Add scattered trees
+            for (let i = 0; i < 30; i++) {
+                const x = Math.floor(random.next() * worldSize - worldSize/2);
+                const z = Math.floor(random.next() * worldSize - worldSize/2);
+                
+                // Don't place trees near spawn
+                if (Math.abs(x) < 10 && Math.abs(z) < 10) continue;
+                
+                createTree(x, 1, z);
+            }
+            
+            // Add a house near spawn
+            createHouse(-5, 1, 5);
+            
+            // Add a small pond
+            createPond(10, 0, -8, 4);
+            
+            // Add distant mountains
+            createMountain(-30, 0, -30, 15, 10);
+            createMountain(-20, 0, -40, 20, 12);
+            createMountain(40, 0, -25, 18, 8);
+        }
+        
+        // Create a better tree at the specified position
         function createTree(x, y, z) {
-            const trunkHeight = 3 + Math.floor(Math.random() * 2);
+            const trunkHeight = 4 + Math.floor(Math.random() * 3);
             
             // Create trunk
             for (let i = 0; i < trunkHeight; i++) {
                 createBlock(x, y + i, z, 'wood');
             }
             
-            // Create leaves
-            const leafSize = 2;
-            for (let lx = -leafSize; lx <= leafSize; lx++) {
-                for (let ly = 0; ly <= leafSize; ly++) {
-                    for (let lz = -leafSize; lz <= leafSize; lz++) {
+            // Create leaves - make a more natural, fuller shape
+            const leafSize = 3;
+            for (let ly = 0; ly <= leafSize; ly++) {
+                const layerSize = leafSize - Math.floor(ly / 2);
+                
+                for (let lx = -layerSize; lx <= layerSize; lx++) {
+                    for (let lz = -layerSize; lz <= layerSize; lz++) {
                         // Skip trunk positions
-                        if (lx === 0 && lz === 0 && ly < trunkHeight - 1) continue;
+                        if (lx === 0 && lz === 0 && ly < trunkHeight - y) continue;
                         
-                        // Make leaves roughly spherical
-                        const distance = Math.sqrt(lx*lx + ly*ly + lz*lz);
-                        if (distance <= leafSize + 0.5) {
+                        // Make leaves roughly spherical with some randomness
+                        const distance = Math.sqrt(lx*lx + lz*lz);
+                        if (distance <= layerSize + (Math.random() * 0.5)) {
                             createBlock(x + lx, y + trunkHeight - 1 + ly, z + lz, 'leaves');
                         }
                     }
@@ -460,11 +689,22 @@
         function createBlock(x, y, z, type) {
             const key = `${x},${y},${z}`;
             
+            // If type is null, remove any existing block
+            if (type === null) {
+                if (world[key]) {
+                    scene.remove(world[key]);
+                    delete world[key];
+                }
+                return;
+            }
+            
             // Check if block already exists
             if (world[key]) return;
             
             // Create a mesh for the block
             const materials = blockMaterials[type];
+            if (!materials) return; // Skip if material doesn't exist
+            
             const mesh = new THREE.Mesh(blockGeometry, materials);
             mesh.position.set(x * cubeSize + cubeSize/2, y * cubeSize + cubeSize/2, z * cubeSize + cubeSize/2);
             mesh.userData = { type, x, y, z };
@@ -517,8 +757,8 @@
             // Keyboard controls
             document.addEventListener('keydown', (event) => {
                 switch (event.code) {
-                    case 'KeyW': moveForward = true; break;
-                    case 'KeyS': moveBackward = true; break;
+                    case 'KeyW': moveForward = true; break;  // W now goes forward (fixed)
+                    case 'KeyS': moveBackward = true; break; // S now goes backward (fixed)
                     case 'KeyA': moveLeft = true; break;
                     case 'KeyD': moveRight = true; break;
                     case 'Space':
@@ -568,6 +808,7 @@
                             new THREE.Vector3(0, 1, 0),
                             new THREE.Vector3(0, -1, 0),
                             new THREE.Vector3(0, 0, 1),
+                            new THREE.Vector3(0, 0, -new THREE.Vector3(0, 0, 1),
                             new THREE.Vector3(0, 0, -1)
                         ][faceIndex];
                         
@@ -639,9 +880,11 @@
             if (moveLeft || moveRight) velocity.x = -direction.x * playerSpeed;
             else velocity.x = 0;
             
-            // Apply movement
-            controls.moveRight(velocity.x * delta);
-            controls.moveForward(velocity.z * delta);
+            // Apply movement - FIXED: now W moves forward and S moves backward
+            if (moveForward) controls.moveForward(playerSpeed * delta);
+            if (moveBackward) controls.moveForward(-playerSpeed * delta);
+            if (moveLeft) controls.moveRight(-playerSpeed * delta);
+            if (moveRight) controls.moveRight(playerSpeed * delta);
             
             // Apply gravity and check for ground collision
             camera.position.y += velocity.y * delta;
@@ -668,6 +911,15 @@
                 velocity.set(0, 0, 0);
             }
             
+            // Add clouds that slowly move across the sky
+            if (Math.random() < 0.001) {
+                createCloud(
+                    Math.random() * 100 - 50,
+                    30 + Math.random() * 10,
+                    Math.random() * 100 - 50
+                );
+            }
+            
             // Update HUD
             document.getElementById('position').textContent = 
                 `${Math.floor(camera.position.x)}, ${Math.floor(camera.position.y)}, ${Math.floor(camera.position.z)}`;
@@ -676,6 +928,54 @@
             renderer.render(scene, camera);
             
             prevTime = time;
+        }
+        
+        // Create a cloud
+        function createCloud(x, y, z) {
+            const cloudSize = 3 + Math.floor(Math.random() * 4);
+            const cloudGroup = new THREE.Group();
+            
+            // Create cloud particles
+            for (let dx = 0; dx < cloudSize; dx++) {
+                for (let dy = 0; dy < 2; dy++) {
+                    for (let dz = 0; dz < cloudSize; dz++) {
+                        // Skip some voxels to make it look more cloud-like
+                        if (Math.random() > 0.7) continue;
+                        
+                        const cloudGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+                        const cloudMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.8 });
+                        const cloudVoxel = new THREE.Mesh(cloudGeometry, cloudMaterial);
+                        
+                        cloudVoxel.position.set(
+                            x + dx * cubeSize,
+                            y + dy * cubeSize,
+                            z + dz * cubeSize
+                        );
+                        
+                        cloudGroup.add(cloudVoxel);
+                    }
+                }
+            }
+            
+            scene.add(cloudGroup);
+            
+            // Move and remove the cloud after some time
+            const cloudSpeed = 0.5 + Math.random() * 1.5;
+            const direction = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+            
+            function moveCloud() {
+                cloudGroup.position.x += direction.x * cloudSpeed * 0.05;
+                cloudGroup.position.z += direction.z * cloudSpeed * 0.05;
+                
+                // Remove if too far
+                if (cloudGroup.position.length() > 150) {
+                    scene.remove(cloudGroup);
+                } else {
+                    requestAnimationFrame(moveCloud);
+                }
+            }
+            
+            moveCloud();
         }
         
         // Handle errors
